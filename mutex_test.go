@@ -9,11 +9,10 @@ import (
 )
 
 func TestMutexExp_Concurrent(t *testing.T) {
+	const goroutines = 100
 	var mu mutex.MutexExp
 	counter := 0
 	wg := sync.WaitGroup{}
-
-	const goroutines = 100
 
 	wg.Add(goroutines)
 
@@ -26,6 +25,34 @@ func TestMutexExp_Concurrent(t *testing.T) {
 			current := counter
 			time.Sleep(10 * time.Millisecond)
 			counter = current + 1
+		}()
+	}
+
+	wg.Wait()
+
+	if counter != goroutines {
+		t.Fatalf("expected counter to be %d, got %d", goroutines, counter)
+	}
+}
+
+func TestShardedMutexExp_Concurrent(t *testing.T) {
+	const goroutines = 100
+	var mu *mutex.ShardedMutex = mutex.NewShardedMutex(goroutines)
+	counter := 0
+	wg := sync.WaitGroup{}
+
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			key := mutex.CalculateKey(goroutines)
+			mu.Lock(key)
+
+			current := counter
+			time.Sleep(10 * time.Millisecond)
+			counter = current + 1
+			mu.Unlock(key)
 		}()
 	}
 
