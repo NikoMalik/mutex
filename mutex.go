@@ -1,9 +1,7 @@
 package mutex
 
 import (
-	"hash/fnv"
 	"runtime"
-	"strconv"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -82,7 +80,14 @@ func (s *ShardedMutex) Unlock(key int) {
 }
 
 func CalculateKey(data int) int {
-	h := fnv.New32a()
-	h.Write([]byte(strconv.Itoa(data)))
-	return int(h.Sum32())
+
+	x := uint32(data)
+
+	x ^= x << 13
+	x ^= x >> 7
+	x ^= x << 3
+	x ^= x >> 17
+	x ^= x << 5
+
+	return int(x)
 }
