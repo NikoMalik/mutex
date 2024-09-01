@@ -35,7 +35,7 @@ func (m *MutexExp) Lock() {
 			spin++
 			runtime.Gosched() // Yield the processor
 		} else {
-			time.Sleep(10 * time.Microsecond) // Back off a bit
+			time.Sleep(5 * time.Microsecond) // Back off a bit
 			spin = 0
 		}
 	}
@@ -65,18 +65,15 @@ func NewShardedMutex(shardCount int) *ShardedMutex {
 }
 
 func (s *ShardedMutex) GetShard(key int) *MutexExp {
-	index := key % s.count
-	return &s.shards[index]
+	return &s.shards[key%len(s.shards)]
 }
 
 func (s *ShardedMutex) Lock(key int) {
-	shard := s.GetShard(key)
-	shard.Lock()
+	s.GetShard(key).Lock()
 }
 
 func (s *ShardedMutex) Unlock(key int) {
-	shard := s.GetShard(key)
-	shard.Unlock()
+	s.GetShard(key).Unlock()
 }
 
 func CalculateKey(data int) int {
