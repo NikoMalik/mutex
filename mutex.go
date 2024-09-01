@@ -65,9 +65,8 @@ func NewShardedMutex(shardCount int) *ShardedMutex {
 }
 
 func (s *ShardedMutex) GetShard(key int) *MutexExp {
-	return &s.shards[key%len(s.shards)]
+	return &s.shards[key&(len(s.shards)-1)]
 }
-
 func (s *ShardedMutex) Lock(key int) {
 	s.GetShard(key).Lock()
 }
@@ -75,16 +74,12 @@ func (s *ShardedMutex) Lock(key int) {
 func (s *ShardedMutex) Unlock(key int) {
 	s.GetShard(key).Unlock()
 }
-
 func CalculateKey(data int) int {
-
 	x := uint32(data)
-
 	x ^= x << 13
 	x ^= x >> 7
 	x ^= x << 3
 	x ^= x >> 17
 	x ^= x << 5
-
 	return int(x)
 }
