@@ -149,3 +149,93 @@ func BenchmarkShardedMutexExp_Concurrent(b *testing.B) {
 		b.Fatalf("expected counter to be %d, got %d", goroutines, counter)
 	}
 }
+
+func BenchmarkRlockMutexDefault(t *testing.B) {
+	var m sync.RWMutex
+	var wg sync.WaitGroup
+	const n = 10
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			m.RLock()
+			defer m.RUnlock()
+
+			time.Sleep(10 * time.Millisecond)
+		}(i)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m.Lock()
+		defer m.Unlock()
+
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	wg.Wait()
+}
+
+func BenchmarkRlockWithBaseMutexExp(t *testing.B) {
+	var m MutexExp
+	var wg sync.WaitGroup
+	const n = 10
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			m.Lock()
+			defer m.Unlock()
+
+			time.Sleep(10 * time.Millisecond)
+		}(i)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m.Lock()
+		defer m.Unlock()
+
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	wg.Wait()
+}
+
+func BenchmarkRlockMutexExp(t *testing.B) {
+	var m MutexExp
+	var wg sync.WaitGroup
+	const n = 10
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			m.RLock()
+			defer m.RUnlock()
+
+			time.Sleep(10 * time.Millisecond)
+		}(i)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m.Lock()
+		defer m.Unlock()
+
+		time.Sleep(50 * time.Millisecond)
+	}()
+
+	wg.Wait()
+}

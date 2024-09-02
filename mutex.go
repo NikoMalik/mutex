@@ -11,6 +11,19 @@ import (
 
 const spinCount = 200
 
+const (
+	mutexUnlocked = 0
+	mutexLocked   = 1
+
+	mutexWrite          = 1 << 0
+	mutexReadOffset     = 1 << 1
+	mutexUnderflow      = ^int32(mutexWrite)
+	mutexWriterUnset    = ^int32(mutexWrite - 1)
+	mutexReaderDecrease = ^int32(mutexReadOffset - 1)
+)
+
+var spin int16
+
 type MutexExp struct {
 	i int32
 	_ [constants.CacheLinePadSize - unsafe.Sizeof(int32(0))]byte
@@ -25,34 +38,87 @@ func (m *MutexExp) set(i int32) {
 }
 
 func (m *MutexExp) Lock() {
-	var spin int16
+	if m == nil {
+		panic("BUG: Lock of nil Mutex")
+	}
+loop:
 	for {
-		if atomic.CompareAndSwapInt32(&m.i, 0, 1) {
-
+		if atomic.CompareAndSwapInt32(&m.i, mutexUnlocked, mutexLocked) {
 			return
 		}
 
 		if spin < spinCount {
 			spin++
 			runtime.Gosched() // Yield the processor
+			goto loop
 		} else {
 			time.Sleep(1 * time.Microsecond) // Back off a bit
-			spin = 0
+			spin = mutexUnlocked
 		}
 	}
 }
 
 func (m *MutexExp) Unlock() {
-	if m.get() == 0 {
+	if m == nil {
+		panic("BUG: Unlock of nil Mutex")
+	}
+
+	state := m.get()
+	if state == mutexUnlocked {
 		panic("BUG: Unlock of unlocked Mutex")
 	}
 
-	m.set(0)
+	if state&mutexWrite == mutexWrite {
+		m.set(mutexUnlocked)
+	} else {
+		// The lock is held in read mode; decrease the reader count
+		atomic.AddInt32(&m.i, -mutexReadOffset)
+	}
+}
+
+func (m *MutexExp) RLock() {
+loop:
+	for {
+		state := atomic.LoadInt32(&m.i)
+
+		if state&mutexWrite == 0 {
+			// Lock is free or held in read mode; increment reader count
+			if atomic.CompareAndSwapInt32(&m.i, state, state+mutexReadOffset) {
+				return
+			}
+		}
+
+		if spin < spinCount {
+			spin++
+			runtime.Gosched() // Yield the processor
+			goto loop
+		} else {
+			time.Sleep(1 * time.Microsecond) // Back off a bit
+			spin = mutexUnlocked
+		}
+	}
+}
+
+func (m *MutexExp) RUnlock() {
+	state := m.get()
+	if state&mutexWrite == mutexWrite {
+		panic("BUG: RUnlock of locked Mutex")
+	}
+
+	if state == mutexUnlocked {
+		panic("BUG: RUnlock of unlocked RWMutex")
+	}
+
+	// The lock is held in read mode; decrement reader count
+	if atomic.AddInt32(&m.i, -mutexReadOffset) == mutexUnlocked {
+		// The last reader has released the lock; notify waiting goroutines
+		m.set(mutexUnlocked)
+	}
 }
 
 type ShardedMutex struct {
 	shards []MutexExp
-	_      [constants.CacheLinePadSize - unsafe.Sizeof(MutexExp{})]byte
+	_      [constants.CacheLinePadSize - unsafe.Sizeof(&MutexExp{})]byte
 	count  int
 	_      [constants.CacheLinePadSize - unsafe.Sizeof(int(0))]byte
 }
@@ -65,13 +131,22 @@ func NewShardedMutex(shardCount int) *ShardedMutex {
 }
 
 func (s *ShardedMutex) GetShard(key int) *MutexExp {
+	if s == nil {
+		panic("BUG: GetShard of nil ShardedMutex")
+	}
 	return &s.shards[key&(len(s.shards)-1)]
 }
 func (s *ShardedMutex) Lock(key int) {
+	if s == nil {
+		panic("BUG: Lock of nil ShardedMutex")
+	}
 	s.GetShard(key).Lock()
 }
 
 func (s *ShardedMutex) Unlock(key int) {
+	if s == nil {
+		panic("BUG: Unlock of nil ShardedMutex")
+	}
 	s.GetShard(key).Unlock()
 }
 func CalculateKey(data int) int {
