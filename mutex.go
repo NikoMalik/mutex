@@ -22,8 +22,6 @@ const (
 	mutexReaderDecrease = ^int32(mutexReadOffset - 1)
 )
 
-var spin int16
-
 type MutexExp struct {
 	i int32
 	_ [constants.CacheLinePadSize - unsafe.Sizeof(int32(0))]byte
@@ -41,6 +39,7 @@ func (m *MutexExp) Lock() {
 	if m == nil {
 		panic("BUG: Lock of nil Mutex")
 	}
+	var spin int32
 loop:
 	for {
 		if atomic.CompareAndSwapInt32(&m.i, mutexUnlocked, mutexLocked) {
@@ -53,7 +52,7 @@ loop:
 			goto loop
 		} else {
 			time.Sleep(1 * time.Microsecond) // Back off a bit
-			spin = mutexUnlocked
+			spin = 0
 		}
 	}
 }
@@ -77,6 +76,7 @@ func (m *MutexExp) Unlock() {
 }
 
 func (m *MutexExp) RLock() {
+	var spin int32
 loop:
 	for {
 		state := atomic.LoadInt32(&m.i)
@@ -94,7 +94,7 @@ loop:
 			goto loop
 		} else {
 			time.Sleep(1 * time.Microsecond) // Back off a bit
-			spin = mutexUnlocked
+			spin = 0
 		}
 	}
 }
