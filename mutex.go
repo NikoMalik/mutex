@@ -9,7 +9,7 @@ import (
 	constants "github.com/NikoMalik/low-level-functions/constants"
 )
 
-const spinCount = 100
+const spinCount = 200
 
 type MutexExp struct {
 	i int32
@@ -25,9 +25,10 @@ func (m *MutexExp) set(i int32) {
 }
 
 func (m *MutexExp) Lock() {
-	var spin int32
+	var spin int16
 	for {
 		if atomic.CompareAndSwapInt32(&m.i, 0, 1) {
+
 			return
 		}
 
@@ -35,13 +36,12 @@ func (m *MutexExp) Lock() {
 			spin++
 			runtime.Gosched() // Yield the processor
 		} else {
-			time.Sleep(5 * time.Microsecond) // Back off a bit
+			time.Sleep(1 * time.Microsecond) // Back off a bit
 			spin = 0
 		}
 	}
 }
 
-// Unlock releases the spinlock.
 func (m *MutexExp) Unlock() {
 	if m.get() == 0 {
 		panic("BUG: Unlock of unlocked Mutex")
