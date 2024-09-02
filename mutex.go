@@ -100,8 +100,8 @@ loop:
 }
 
 func (m *MutexExp) RUnlock() {
-	state := m.get()
-	if state&mutexWrite == mutexWrite {
+	state := atomic.LoadInt32(&m.i)
+	if state&mutexWrite != 0 {
 		panic("BUG: RUnlock of locked Mutex")
 	}
 
@@ -109,10 +109,8 @@ func (m *MutexExp) RUnlock() {
 		panic("BUG: RUnlock of unlocked RWMutex")
 	}
 
-	// The lock is held in read mode; decrement reader count
 	if atomic.AddInt32(&m.i, -mutexReadOffset) == mutexUnlocked {
-		// The last reader has released the lock; notify waiting goroutines
-		m.set(mutexUnlocked)
+		return
 	}
 }
 
